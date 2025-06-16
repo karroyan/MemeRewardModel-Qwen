@@ -1600,7 +1600,7 @@ register_template(
     stop_words=["<|im_end|>"],
     replace_eos=True,
     mm_plugin=get_mm_plugin(
-        name="qwen2_omni", audio_token="<|AUDIO|>", image_token="<|IMAGE|>", video_token="<|VIDEO|>"
+        name="qwen2_omni", audio_token="<|AUDIO|>"
     ),
 )
 

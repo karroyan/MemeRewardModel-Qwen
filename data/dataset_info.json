@@ -714,5 +714,21 @@
       "prompt": "content"
     },
     "folder": "python"
+  },
+  "qwen_audio_data": {
+    "file_name": "conversations_bili_zh.json",
+    "formatting": "sharegpt",
+    "columns": {
+    "messages": "conversations",
+    "audios": "audios"
+  }
+  },
+  "qwen_audio_data_bili_en": {
+    "file_name": "conversations_bili_en.json",
+    "formatting": "sharegpt",
+    "columns": {
+    "messages": "conversations",
+    "audios": "audios"
+  }
   }
 }

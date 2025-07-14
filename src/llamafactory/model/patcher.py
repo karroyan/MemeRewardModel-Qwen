@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from trl import AutoModelForCausalLMWithValueHead
 
     from ..hparams import ModelArguments
+    from .model_utils.classification_head import AutoModelForBinaryClassification
 
 
 logger = logging.get_logger(__name__)
@@ -205,6 +206,32 @@ def patch_valuehead_model(model: "AutoModelForCausalLMWithValueHead") -> None:
             return self.pretrained_model.get_output_embeddings()
 
     def create_or_update_model_card(self: "AutoModelForCausalLMWithValueHead", output_dir: str) -> None:
+        if isinstance(self.pretrained_model, PeftModel):
+            self.pretrained_model.create_or_update_model_card(output_dir)
+
+    ignore_modules = [name for name, _ in model.named_parameters() if "pretrained_model" in name]
+    setattr(model, "_keys_to_ignore_on_save", ignore_modules)
+    setattr(model, "tie_weights", MethodType(tie_weights, model))
+    setattr(model, "get_input_embeddings", MethodType(get_input_embeddings, model))
+    setattr(model, "get_output_embeddings", MethodType(get_output_embeddings, model))
+    setattr(model, "create_or_update_model_card", MethodType(create_or_update_model_card, model))
+
+
+def patch_classification_model(model: "AutoModelForBinaryClassification") -> None:
+    """Patch the binary classification model to add necessary methods."""
+    def tie_weights(self: "AutoModelForBinaryClassification") -> None:
+        if isinstance(self.pretrained_model, PreTrainedModel):
+            self.pretrained_model.tie_weights()
+
+    def get_input_embeddings(self: "AutoModelForBinaryClassification") -> torch.nn.Module:
+        if isinstance(self.pretrained_model, PreTrainedModel):
+            return self.pretrained_model.get_input_embeddings()
+
+    def get_output_embeddings(self: "AutoModelForBinaryClassification") -> torch.nn.Module:
+        if isinstance(self.pretrained_model, PreTrainedModel):
+            return self.pretrained_model.get_output_embeddings()
+
+    def create_or_update_model_card(self: "AutoModelForBinaryClassification", output_dir: str) -> None:
         if isinstance(self.pretrained_model, PeftModel):
             self.pretrained_model.create_or_update_model_card(output_dir)
 

@@ -36,7 +36,8 @@ from .model_utils.misc import register_autoclass
 from .model_utils.mod import convert_pretrained_model_to_mod, load_mod_pretrained_model
 from .model_utils.unsloth import load_unsloth_pretrained_model
 from .model_utils.valuehead import load_valuehead_params
-from .patcher import patch_config, patch_model, patch_processor, patch_tokenizer, patch_valuehead_model
+from .model_utils.classification_head import AutoModelForBinaryClassification, prepare_classification_model
+from .patcher import patch_config, patch_model, patch_processor, patch_tokenizer, patch_valuehead_model, patch_classification_model
 
 
 if is_transformers_version_greater_than("4.46.0"):
@@ -125,6 +126,7 @@ def load_model(
     finetuning_args: "FinetuningArguments",
     is_trainable: bool = False,
     add_valuehead: bool = False,
+    add_classification_head: bool = False,
 ) -> "PreTrainedModel":
     r"""Load pretrained model."""
     init_kwargs = _get_init_kwargs(model_args)
@@ -176,6 +178,20 @@ def load_model(
         register_autoclass(config, model, tokenizer)
 
     model = init_adapter(config, model, model_args, finetuning_args, is_trainable)
+
+    if add_classification_head:
+        prepare_classification_model(model)
+        model = AutoModelForBinaryClassification.from_pretrained(model)
+        patch_classification_model(model)
+        
+        # Try to load existing classification head if available
+        if model_args.adapter_name_or_path is not None:
+            classification_head_path = model_args.adapter_name_or_path[-1]
+        else:
+            classification_head_path = model_args.model_name_or_path
+        
+        model.load_classification_head(classification_head_path)
+        logger.info_rank0("Added binary classification head to model")
 
     if add_valuehead:
         model = AutoModelForCausalLMWithValueHead.from_pretrained(model)

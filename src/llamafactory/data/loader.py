@@ -25,6 +25,7 @@ from .converter import align_dataset
 from .data_utils import get_dataset_module, merge_dataset, read_cloud_json, split_dataset
 from .parser import get_dataset_list
 from .processor import (
+    BinaryClassificationDatasetProcessor,
     FeedbackDatasetProcessor,
     PackedSupervisedDatasetProcessor,
     PairwiseDatasetProcessor,
@@ -167,7 +168,7 @@ def _get_merged_dataset(
     model_args: "ModelArguments",
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
-    stage: Literal["pt", "sft", "rm", "ppo", "kto"],
+    stage: Literal["pt", "sft", "rm", "rm_class", "ppo", "kto"],
     return_dict: bool = False,
 ) -> Optional[Union["Dataset", "IterableDataset", dict[str, "Dataset"]]]:
     r"""Return the merged datasets in the standard format."""
@@ -176,7 +177,7 @@ def _get_merged_dataset(
 
     datasets = {}
     for dataset_name, dataset_attr in zip(dataset_names, get_dataset_list(dataset_names, data_args.dataset_dir)):
-        if (stage == "rm" and dataset_attr.ranking is False) or (stage != "rm" and dataset_attr.ranking is True):
+        if (stage == "rm" and dataset_attr.ranking is False) or (stage in ["sft", "pt", "rm_class", "ppo", "kto"] and dataset_attr.ranking is True):
             raise ValueError("The dataset is not applicable in the current training stage.")
 
         datasets[dataset_name] = _load_single_dataset(dataset_attr, model_args, data_args, training_args)
@@ -189,7 +190,7 @@ def _get_merged_dataset(
 
 def _get_dataset_processor(
     data_args: "DataArguments",
-    stage: Literal["pt", "sft", "rm", "ppo", "kto"],
+    stage: Literal["pt", "sft", "rm", "rm_class", "ppo", "kto"],
     template: "Template",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"],
@@ -219,6 +220,8 @@ def _get_dataset_processor(
 
     elif stage == "rm":
         dataset_processor_class = PairwiseDatasetProcessor
+    elif stage == "rm_class":
+        dataset_processor_class = BinaryClassificationDatasetProcessor
     elif stage == "kto":
         dataset_processor_class = FeedbackDatasetProcessor
     else:
@@ -231,7 +234,7 @@ def _get_preprocessed_dataset(
     dataset: Optional[Union["Dataset", "IterableDataset"]],
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
-    stage: Literal["pt", "sft", "rm", "ppo", "kto"],
+    stage: Literal["pt", "sft", "rm", "rm_class", "ppo", "kto"],
     template: "Template",
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
@@ -279,7 +282,7 @@ def get_dataset(
     model_args: "ModelArguments",
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
-    stage: Literal["pt", "sft", "rm", "ppo", "kto"],
+    stage: Literal["pt", "sft", "rm", "rm_class", "ppo", "kto"],
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
 ) -> "DatasetModule":

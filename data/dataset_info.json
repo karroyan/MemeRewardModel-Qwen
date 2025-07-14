@@ -730,5 +730,110 @@
     "messages": "conversations",
     "audios": "audios"
   }
-  }
+  },
+"boring_detailed_train": {
+  "file_name": "boring_detailed_train.json",
+  "formatting": "sharegpt",
+  "columns": {
+    "messages": "messages",
+    "images": "images",
+    "labels": "labels"
+  },
+  "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+"boringmeme_train": {
+  "file_name": "boringmeme_train.json",
+  "formatting": "sharegpt",
+  "columns": {
+    "messages": "messages",
+    "images": "images",
+    "labels": "labels"
+  },
+  "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+},
+"irrelevantmeme_train": {
+  "file_name": "irrelevantmeme_train.json",
+  "formatting": "sharegpt",
+  "columns": {
+    "messages": "messages",
+    "images": "images",
+    "labels": "labels"
+  },
+  "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+},
+"lowperformancememe_train": {
+  "file_name": "lowperformancememe_train.json",
+  "formatting": "sharegpt",
+  "columns": {
+    "messages": "messages",
+    "images": "images",
+    "labels": "labels"
+  },
+  "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+},
+"object_add_train": {
+  "file_name": "object_add_train.json",
+  "formatting": "sharegpt",
+  "columns": {
+    "messages": "messages",
+    "images": "images",
+    "labels": "labels"
+  },
+  "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+},
+"object_changed_train": {
+  "file_name": "object_changed_train.json",
+  "formatting": "sharegpt",
+  "columns": {
+    "messages": "messages",
+    "images": "images",
+    "labels": "labels"
+  },
+  "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+},
+"text_replaced_train": {
+  "file_name": "text_replaced_train.json",
+  "formatting": "sharegpt",
+  "columns": {
+    "messages": "messages",
+    "images": "images",
+    "labels": "labels"
+  },
+  "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+}
 }

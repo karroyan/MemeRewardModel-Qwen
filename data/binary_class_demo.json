@@ -1,0 +1,40 @@
+[
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Compare these two images and determine which one is of better quality."
+      },
+      {
+        "role": "assistant",
+        "content": "I'll analyze both images to determine their quality."
+      }
+    ],
+    "images": ["image1.jpg", "image2.jpg"],
+    "labels": 0
+  },
+  {
+    "messages": [
+      {
+        "role": "user", 
+        "content": "Which image shows a clearer view of the object?"
+      }
+    ],
+    "images": ["path/to/image_a.png", "path/to/image_b.png"],
+    "labels": 1
+  },
+  {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Compare the aesthetics of these two photographs."
+      },
+      {
+        "role": "assistant",
+        "content": "Based on composition and lighting, I can evaluate the aesthetic quality."
+      }
+    ],
+    "images": ["photo1.jpg", "photo2.jpg"],
+    "labels": 0
+  }
+] 

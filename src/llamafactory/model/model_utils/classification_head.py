@@ -71,11 +71,12 @@ class AttentionPooling(nn.Module):
         q = q.reshape(B, self.num_heads, 1, self.head_dim)  # B, H, 1, C
 
         # Attention weights
-        attn = (q @ k.transpose(-2, -1)) * self.scale  # B, H, 1, S
+        scale = torch.tensor(self.scale, device=k.device, dtype=k.dtype)
+        attn = (q @ k.transpose(-2, -1)) * scale  # B, H, 1, S
 
         # Add position bias
         if self.position_bias:
-            position_bias = torch.arange(S, device=k.device).float() / S * self.position_bias_scale
+            position_bias = torch.arange(S, device=k.device, dtype=k.dtype) / S * self.position_bias_scale
             attn = attn + position_bias.view(1, 1, 1, -1)  # Add position bias
 
         # Attention pooling

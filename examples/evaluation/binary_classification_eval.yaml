@@ -1,0 +1,19 @@
+### Model configuration
+model_name_or_path: /fs-computility/niuyazhe/lixueyan/meme/LLaMA-Factory/output/binary_classification_merged
+template: qwen2_vl
+finetuning_type: lora
+trust_remote_code: true
+
+### Data configuration
+dataset_dir: data
+eval_dataset: boring_detailed_train
+
+### Evaluation configuration
+stage: rm_class
+do_eval: true
+per_device_eval_batch_size: 4
+dataloader_num_workers: 4
+remove_unused_columns: false
+
+### Output configuration
+output_dir: ./eval_output 

@@ -116,32 +116,51 @@ class PairwiseTrainer(Trainer):
         loss_fct = torch.nn.CrossEntropyLoss()
         loss = loss_fct(logits, labels[:, 0])
         
-        # For compatibility with the rest of the framework, extract individual scores
-        # This allows the save_predictions method to work as expected
-        probabilities = torch.nn.functional.softmax(logits, dim=-1)
-        chosen_scores = probabilities[:, 1]  # Probability of class 1 (preferred)
-        rejected_scores = probabilities[:, 0]  # Probability of class 0 (not preferred)
-        
         if return_outputs:
-            return loss, (loss, chosen_scores, rejected_scores)
+            # For evaluation, return logits and labels
+            if not self.model.training:
+                return loss, (logits, labels)
+            else:
+                # For training, return compatibility format (chosen_scores, rejected_scores)
+                probabilities = torch.nn.functional.softmax(logits, dim=-1)
+                chosen_scores = probabilities[:, 1]  # Probability of class 1 (preferred)
+                rejected_scores = probabilities[:, 0]  # Probability of class 0 (not preferred)
+                return loss, (chosen_scores, rejected_scores)
         else:
             return loss
 
-    def save_predictions(self, predict_results: "PredictionOutput") -> None:
-        r"""Save model predictions to `output_dir`.
-
-        A custom behavior that not contained in Seq2SeqTrainer.
+    def prediction_step(
+        self,
+        model: "PreTrainedModel",
+        inputs: dict[str, "torch.Tensor"],
+        prediction_loss_only: bool,
+        ignore_keys: Optional[list[str]] = None,
+    ) -> tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
-        if not self.is_world_process_zero():
-            return
-
-        output_prediction_file = os.path.join(self.args.output_dir, "generated_predictions.jsonl")
-        logger.info_rank0(f"Saving prediction results to {output_prediction_file}")
-        chosen_scores, rejected_scores = predict_results.predictions
-
-        with open(output_prediction_file, "w", encoding="utf-8") as writer:
-            res: list[str] = []
-            for c_score, r_score in zip(chosen_scores, rejected_scores):
-                res.append(json.dumps({"chosen": round(float(c_score), 2), "rejected": round(float(r_score), 2)}))
-
-            writer.write("\n".join(res))
+        Custom prediction step to return logits for evaluation.
+        """
+        has_labels = "labels" in inputs
+        
+        with torch.no_grad():
+            # Forward pass
+            outputs = model(**inputs, return_dict=True)
+            logits = outputs.logits
+            
+            if has_labels:
+                labels = inputs["labels"]
+                if labels.ndim == 2:
+                    labels = labels[:, 0]
+                
+                # Compute loss
+                loss_fct = torch.nn.CrossEntropyLoss()
+                loss = loss_fct(logits, labels)
+            else:
+                loss = None
+                labels = None
+        
+        if prediction_loss_only:
+            return (loss, None, None)
+        
+        return (loss, logits, labels)
+    
+    # Note: Removed save_predictions method as it's not needed for simple accuracy evaluation

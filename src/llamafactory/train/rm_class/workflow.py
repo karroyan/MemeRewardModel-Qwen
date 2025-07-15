@@ -22,7 +22,7 @@ from ...extras.ploting import plot_loss
 from ...model import load_model, load_tokenizer
 from ..callbacks import fix_valuehead_checkpoint
 from ..trainer_utils import create_modelcard_and_push
-from .metric import ComputeAccuracy
+from .metric import ComputeClassificationAccuracy
 from .trainer import PairwiseTrainer
 
 
@@ -55,7 +55,7 @@ def run_rm_class(
         finetuning_args=finetuning_args,
         data_collator=data_collator,
         callbacks=callbacks,
-        compute_metrics=ComputeAccuracy(),
+        compute_metrics=ComputeClassificationAccuracy(),
         **dataset_module,
         **tokenizer_module,
     )
@@ -80,19 +80,12 @@ def run_rm_class(
                 keys += ["eval_loss", "eval_accuracy"]
 
             plot_loss(training_args.output_dir, keys=keys)
-
+    
     # Evaluation
     if training_args.do_eval:
         metrics = trainer.evaluate(metric_key_prefix="eval")
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
-
-    # Predict
-    if training_args.do_predict:
-        predict_results = trainer.predict(dataset_module["eval_dataset"], metric_key_prefix="predict")
-        trainer.log_metrics("predict", predict_results.metrics)
-        trainer.save_metrics("predict", predict_results.metrics)
-        trainer.save_predictions(predict_results)
 
     # Create model card
     create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)

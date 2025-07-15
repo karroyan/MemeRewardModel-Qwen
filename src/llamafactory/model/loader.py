@@ -231,5 +231,4 @@ def load_model(
     if model_args.print_param_status and int(os.getenv("LOCAL_RANK", "0")) == 0:
         for name, param in model.named_parameters():
             print(f"name: {name}, dtype: {param.dtype}, device: {param.device}, trainable: {param.requires_grad}")
-
     return model

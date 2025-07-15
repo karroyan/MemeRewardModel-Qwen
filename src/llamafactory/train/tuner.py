@@ -134,6 +134,9 @@ def export_model(args: Optional[dict[str, Any]] = None) -> None:
     if not isinstance(model, PreTrainedModel):
         raise ValueError("The model is not a `PreTrainedModel`, export aborted.")
 
+    # Import here to avoid circular imports
+    from ..model import AutoModelForBinaryClassification
+
     if getattr(model, "quantization_method", None) is not None:  # quantized model adopts float16 type
         setattr(model.config, "torch_dtype", torch.float16)
     else:
@@ -148,18 +151,39 @@ def export_model(args: Optional[dict[str, Any]] = None) -> None:
         model = model.to(output_dtype)
         logger.info_rank0(f"Convert model dtype to: {output_dtype}.")
 
-    model.save_pretrained(
-        save_directory=model_args.export_dir,
-        max_shard_size=f"{model_args.export_size}GB",
-        safe_serialization=(not model_args.export_legacy_format),
-    )
-    if model_args.export_hub_model_id is not None:
-        model.push_to_hub(
-            model_args.export_hub_model_id,
-            token=model_args.hf_hub_token,
+    # Handle binary classification model export
+    if isinstance(model, AutoModelForBinaryClassification):
+        # For binary classification models, use the custom save_pretrained method
+        model.save_pretrained(
+            save_directory=model_args.export_dir,
             max_shard_size=f"{model_args.export_size}GB",
             safe_serialization=(not model_args.export_legacy_format),
         )
+        logger.info_rank0(f"Saved binary classification model to {model_args.export_dir}")
+    else:
+        # For regular models, use the standard save_pretrained method
+        model.save_pretrained(
+            save_directory=model_args.export_dir,
+            max_shard_size=f"{model_args.export_size}GB",
+            safe_serialization=(not model_args.export_legacy_format),
+        )
+
+    if model_args.export_hub_model_id is not None:
+        if isinstance(model, AutoModelForBinaryClassification):
+            # For binary classification models, push the pretrained model part to hub
+            model.pretrained_model.push_to_hub(
+                model_args.export_hub_model_id,
+                token=model_args.hf_hub_token,
+                max_shard_size=f"{model_args.export_size}GB",
+                safe_serialization=(not model_args.export_legacy_format),
+            )
+        else:
+            model.push_to_hub(
+                model_args.export_hub_model_id,
+                token=model_args.hf_hub_token,
+                max_shard_size=f"{model_args.export_size}GB",
+                safe_serialization=(not model_args.export_legacy_format),
+            )
 
     if finetuning_args.stage == "rm":
         if model_args.adapter_name_or_path is not None:
@@ -179,6 +203,23 @@ def export_model(args: Optional[dict[str, Any]] = None) -> None:
                 os.path.join(model_args.export_dir, V_HEAD_WEIGHTS_NAME),
             )
             logger.info_rank0(f"Copied valuehead to {model_args.export_dir}.")
+
+    if finetuning_args.stage == "rm_class":
+        # Handle binary classification head
+        if model_args.adapter_name_or_path is not None:
+            classification_head_path = model_args.adapter_name_or_path[-1]
+        else:
+            classification_head_path = model_args.model_name_or_path
+
+        classification_head_file = os.path.join(classification_head_path, "classification_head.pt")
+        if os.path.exists(classification_head_file):
+            shutil.copy(
+                classification_head_file,
+                os.path.join(model_args.export_dir, "classification_head.pt"),
+            )
+            logger.info_rank0(f"Copied classification head to {model_args.export_dir}.")
+        else:
+            logger.warning_rank0(f"Classification head file not found at {classification_head_file}.")
 
     try:
         tokenizer.padding_side = "left"  # restore padding side

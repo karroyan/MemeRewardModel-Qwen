@@ -104,7 +104,6 @@ class BinaryClassificationDatasetProcessor(DatasetProcessor):
             if "_labels" not in examples or examples["_labels"][i] is None:
                 logger.warning_rank0("Dropped example without classification label")
                 continue
-                
             label = examples["_labels"][i]
             if label[0] not in [0, 1]:
                 logger.warning_rank0(f"Dropped example with invalid label: {label} (expected 0 or 1)")

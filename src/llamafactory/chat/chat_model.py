@@ -179,6 +179,7 @@ def run_chat() -> None:
         response = ""
         for new_text in chat_model.stream_chat(messages):
             print(new_text, end="", flush=True)
+            breakpoint()
             response += new_text
         print()
         messages.append({"role": "assistant", "content": response})

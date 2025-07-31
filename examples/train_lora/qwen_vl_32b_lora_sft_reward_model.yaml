@@ -1,5 +1,5 @@
 ### model
-model_name_or_path: /fs-computility/niuyazhe/shared/meme/model/Keye-VL-8B-Preview
+model_name_or_path: /fs-computility/niuyazhe/shared/VLM/QwenVL/Qwen2.5-VL-32B-Instruct
 image_max_pixels: 262144
 video_max_pixels: 16384
 trust_remote_code: true
@@ -13,7 +13,7 @@ lora_target: all
 
 ### dataset
 dataset: boring_detailed_train, boringmeme_train, irrelevantmeme_train, lowperformancememe_train, object_add_train, object_changed_train
-template: keye_vl
+template: qwen2_vl
 cutoff_len: 2048
 max_samples: 1000
 overwrite_cache: true
@@ -21,7 +21,7 @@ preprocessing_num_workers: 16
 dataloader_num_workers: 4
 
 ### output
-output_dir: saves/keye_vl-8b/rm_class
+output_dir: saves/qwen_vl_32b/rm_class
 logging_steps: 10
 save_steps: 2200
 plot_loss: true

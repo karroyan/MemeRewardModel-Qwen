@@ -1693,6 +1693,136 @@ class VideoLlavaPlugin(BasePlugin):
         return messages
 
 
+@dataclass
+class KeyeVLPlugin(BasePlugin):
+    @override
+    def _preprocess_image(self, image: "ImageObject", **kwargs) -> "ImageObject":
+        image = super()._preprocess_image(image, **kwargs)
+        # Apply similar image preprocessing as Keye processor
+        if min(image.width, image.height) < 28:
+            width, height = max(image.width, 28), max(image.height, 28)
+            image = image.resize((width, height))
+
+        if image.width / image.height > 200:
+            width, height = image.height * 180, image.height
+            image = image.resize((width, height))
+
+        if image.height / image.width > 200:
+            width, height = image.width, image.width * 180
+            image = image.resize((width, height))
+
+        return image
+
+    @override
+    def _regularize_videos(
+        self, videos: list["VideoInput"], **kwargs
+    ) -> dict[str, Union[list[list["ImageObject"]], list[float]]]:
+        results, fps_per_video = [], []
+        for video in videos:
+            container = av.open(video, "r")
+            video_stream = next(stream for stream in container.streams if stream.type == "video")
+            sample_indices = self._get_video_sample_indices(video_stream, **kwargs)
+            frames: list[ImageObject] = []
+            container.seek(0)
+            for frame_idx, frame in enumerate(container.decode(video_stream)):
+                if frame_idx in sample_indices:
+                    frames.append(frame.to_image())
+
+            # Keye-VL may have different frame requirements than Qwen2-VL
+            # Keep original frame count for now
+            frames = self._regularize_images(frames, **kwargs)["images"]
+            results.append(frames)
+            
+            if video_stream.duration is None:
+                fps_per_video.append(2.0)
+            else:
+                fps_per_video.append(len(sample_indices) / float(video_stream.duration * video_stream.time_base))
+
+        return {"videos": results, "fps_per_video": fps_per_video}
+
+    @override
+    def _get_mm_inputs(
+        self,
+        images: list["ImageInput"],
+        videos: list["VideoInput"],
+        audios: list["AudioInput"],
+        processor: "MMProcessor",
+    ) -> dict[str, "torch.Tensor"]:
+        image_processor: BaseImageProcessor = getattr(processor, "image_processor", None)
+        mm_inputs = {}
+        
+        if len(images) != 0:
+            images = self._regularize_images(
+                images,
+                image_max_pixels=getattr(processor, "max_pixels", 768 * 768),
+                image_min_pixels=getattr(processor, "min_pixels", 32 * 32),
+            )["images"]
+            mm_inputs.update(image_processor(images=images, return_tensors="pt"))
+
+        if len(videos) != 0:
+            video_data = self._regularize_videos(
+                videos,
+                image_max_pixels=getattr(processor, "max_pixels", 256 * 256),
+                image_min_pixels=getattr(processor, "min_pixels", 16 * 16),
+                video_fps=getattr(processor, "video_fps", 2.0),
+                video_maxlen=getattr(processor, "video_maxlen", 128),
+            )
+            mm_inputs.update(image_processor(images=None, videos=video_data["videos"], return_tensors="pt"))
+            
+            # Handle temporal patch size and second_per_grid_ts as in Keye processor
+            temporal_patch_size: int = getattr(image_processor, "temporal_patch_size", 2)
+            if "second_per_grid_ts" in processor.model_input_names:
+                mm_inputs["second_per_grid_ts"] = torch.tensor([
+                    temporal_patch_size / fps for fps in video_data["fps_per_video"]
+                ])
+
+        return mm_inputs
+
+    @override
+    def process_messages(
+        self,
+        messages: list[dict[str, str]],
+        images: list["ImageInput"],
+        videos: list["VideoInput"],
+        audios: list["AudioInput"],
+        processor: Optional["MMProcessor"],
+    ) -> list[dict[str, str]]:
+        self._validate_input(processor, images, videos, audios)
+        self._validate_messages(messages, images, videos, audios)
+        num_image_tokens, num_video_tokens = 0, 0
+        messages = deepcopy(messages)
+        image_processor: BaseImageProcessor = getattr(processor, "image_processor")
+
+        merge_length: int = getattr(image_processor, "merge_size", 4) ** 2
+        if self.expand_mm_tokens:
+            mm_inputs = self._get_mm_inputs(images, videos, audios, processor)
+            image_grid_thw = mm_inputs.get("image_grid_thw", [])
+            video_grid_thw = mm_inputs.get("video_grid_thw", [])
+        else:
+            image_grid_thw = [None] * len(images)
+            video_grid_thw = [None] * len(videos)
+
+        for message in messages:
+            content = message["content"]
+            while IMAGE_PLACEHOLDER in content:
+                image_seqlen = image_grid_thw[num_image_tokens].prod() // merge_length if self.expand_mm_tokens else 1
+                content = content.replace(
+                    IMAGE_PLACEHOLDER, f"<|vision_start|>{self.image_token * image_seqlen}<|vision_end|>", 1
+                )
+                num_image_tokens += 1
+
+            while VIDEO_PLACEHOLDER in content:
+                video_seqlen = video_grid_thw[num_video_tokens].prod() // merge_length if self.expand_mm_tokens else 1
+                content = content.replace(
+                    VIDEO_PLACEHOLDER, f"<|vision_start|>{self.video_token * video_seqlen}<|vision_end|>", 1
+                )
+                num_video_tokens += 1
+
+            message["content"] = content
+
+        return messages
+
+
 PLUGINS = {
     "base": BasePlugin,
     "gemma3": Gemma3Plugin,
@@ -1710,6 +1840,7 @@ PLUGINS = {
     "qwen2_omni": Qwen2OmniPlugin,
     "qwen2_vl": Qwen2VLPlugin,
     "video_llava": VideoLlavaPlugin,
+    "keye_vl": KeyeVLPlugin,
 }
 
 

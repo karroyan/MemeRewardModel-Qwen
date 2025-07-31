@@ -6,9 +6,11 @@ import torch
 from itertools import combinations
 from tqdm import tqdm
 from typing import Optional, Any
-from transformers import Seq2SeqTrainingArguments
-from llamafactory.hparams import get_infer_args
-from llamafactory.model import load_model, load_tokenizer
+from transformers import Seq2SeqTrainingArguments, AutoModel, AutoConfig
+from llamafactory.hparams import get_infer_args, ModelArguments, DataArguments, FinetuningArguments
+from llamafactory.model import load_tokenizer, AutoModelForBinaryClassification
+from llamafactory.model.model_utils.classification_head import prepare_classification_model
+from llamafactory.model.patcher import patch_classification_model
 from llamafactory.data import get_template_and_fix_tokenizer, ClassificationDataCollatorWithPadding
 
 
@@ -69,10 +71,19 @@ def batch_inference(model, dataloader):
     """Run inference on batches from dataloader."""
     all_preds = []
     device = next(model.parameters()).device
+    print(f"Using device for inference: {device}")
     
-    for batch in tqdm(dataloader, desc="Running inference"):
+    for i, batch in enumerate(tqdm(dataloader, desc="Running inference")):
         # Move entire batch to device, handling nested structures
         batch = move_to_device(batch, device)
+        
+        # Handle image_grid_thw if present
+        if 'image_grid_thw' in batch:
+            if isinstance(batch['image_grid_thw'], torch.Tensor):
+                batch['image_grid_thw'] = batch['image_grid_thw'].to(device)
+            elif isinstance(batch['image_grid_thw'], (list, tuple)):
+                batch['image_grid_thw'] = [item.to(device) if isinstance(item, torch.Tensor) else item 
+                                          for item in batch['image_grid_thw']]
         
         with torch.no_grad():
             outputs = model(**batch)
@@ -191,7 +202,7 @@ def main():
     config['stage'] = 'rm_class'  # For reward model classification
     config['finetuning_type'] = 'lora' if 'adapter_name_or_path' in config else 'full'
 
-    # Load model, tokenizer, template
+    # Load tokenizer and template using llamafactory
     model_args, data_args, finetuning_args, generating_args = get_infer_args(config)
     tokenizer_module = load_tokenizer(model_args)
     tokenizer = tokenizer_module["tokenizer"]
@@ -199,25 +210,98 @@ def main():
     tokenizer.padding_side = "right"  # avoid overflow issue in batched inference
     template = get_template_and_fix_tokenizer(tokenizer, data_args)
     
-    # Load model with classification head
-    model = load_model(
-        tokenizer, model_args, finetuning_args, 
-        is_trainable=False, 
-        add_classification_head=True
+    # Load model directly using transformers and AutoModelForBinaryClassification
+    print(f"Loading base model from: {model_args.model_name_or_path}")
+    
+    # Determine target device
+    if torch.cuda.is_available():
+        target_device = "cuda:0"
+    else:
+        target_device = "cpu"
+    print(f"Target device: {target_device}")
+    
+    # Load base model using transformers
+    model_config = AutoConfig.from_pretrained(
+        model_args.model_name_or_path,
+        trust_remote_code=model_args.trust_remote_code
     )
+    
+    base_model = AutoModel.from_pretrained(
+        model_args.model_name_or_path,
+        config=model_config,
+        trust_remote_code=model_args.trust_remote_code,
+        torch_dtype=getattr(torch, model_args.compute_dtype) if model_args.compute_dtype else None,
+        # Remove device_map to ensure model is loaded to single device
+        # device_map="auto" if model_args.device_map == "auto" else None
+    )
+    
+    # Move base model to target device
+    base_model = base_model.to(target_device)
+    
+    # Prepare model for classification
+    prepare_classification_model(base_model)
+    
+    # Wrap with AutoModelForBinaryClassification
+    model = AutoModelForBinaryClassification.from_pretrained(base_model)
+    
+    # Ensure the wrapped model is also on the target device
+    model = model.to(target_device)
+    
+    # Apply patches
+    patch_classification_model(model)
+    
+    # Load classification head if adapter path is provided
+    if model_args.adapter_name_or_path is not None:
+        classification_head_path = model_args.adapter_name_or_path[-1] if isinstance(model_args.adapter_name_or_path, list) else model_args.adapter_name_or_path
+    else:
+        classification_head_path = model_args.model_name_or_path
+    
+    try:
+        model.load_classification_head(classification_head_path)
+        print(f"Loaded classification head from: {classification_head_path}")
+        # Ensure classification head is also on the correct device
+        if hasattr(model, 'classification_head'):
+            model.classification_head = model.classification_head.to(target_device)
+    except Exception as e:
+        print(f"Warning: Could not load classification head from {classification_head_path}: {e}")
+    
     model.eval()
 
-    # Ensure model is on GPU if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
+    # Get the actual device where model parameters are located
+    model_device = next(model.parameters()).device
+    
+    # Verify all model parameters are on the same device
+    devices = set()
+    for name, param in model.named_parameters():
+        devices.add(param.device)
+    
+    if len(devices) > 1:
+        print(f"Warning: Model parameters are on multiple devices: {devices}")
+        print("Moving all parameters to target device...")
+        model = model.to(target_device)
+        # Re-check devices after moving
+        devices = set()
+        for name, param in model.named_parameters():
+            devices.add(param.device)
+        print(f"After moving, devices: {devices}")
+    else:
+        print(f"All model parameters are on device: {list(devices)[0]}")
 
     print(f"\nLoaded model:")
     print(f"Base model: {model_args.model_name_or_path}")
     if model_args.adapter_name_or_path:
         print(f"Adapter: {model_args.adapter_name_or_path}")
     print(f"Template: {data_args.template}")
-    print(f"Device: {device}")
-    print(f"Model device: {next(model.parameters()).device}")
+    print(f"Model device: {model_device}")
+    
+    # Check if model parameters are on multiple devices (distributed)
+    devices = set()
+    for param in model.parameters():
+        devices.add(param.device)
+    if len(devices) > 1:
+        print(f"Warning: Model is distributed across multiple devices: {devices}")
+    else:
+        print(f"Model is on single device: {model_device}")
 
     # Load data directly from JSON file
     image_paths, scores = load_image_paths(args.dataset_path)

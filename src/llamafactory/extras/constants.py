@@ -2684,6 +2684,17 @@ register_model_group(
 
 register_model_group(
     models={
+        "Keye-VL-8B-Preview": {
+            DownloadSource.DEFAULT: "/fs-computility/niuyazhe/shared/meme/model/Keye-VL-8B-Preview",
+        },
+    },
+    template="keye_vl",
+    multimodal=True,
+)
+
+
+register_model_group(
+    models={
         "Seed-Coder-8B-Base": {
             DownloadSource.DEFAULT: "ByteDance-Seed/Seed-Coder-8B-Base",
         },
